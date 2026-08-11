@@ -12,7 +12,26 @@
 from setuptools import setup
 from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 import os
-os.path.dirname(os.path.abspath(__file__))
+
+
+RASTER_BLOCK_EDGE_ENV = "THREEDGS_SLAM_RASTER_BLOCK_EDGE"
+
+
+def raster_block_edge_compile_args():
+    """Select an explicitly requested native tile edge without changing defaults."""
+    value = os.environ.get(RASTER_BLOCK_EDGE_ENV)
+    if value is None:
+        return []
+    try:
+        edge = int(value)
+    except ValueError as error:
+        raise RuntimeError(f"{RASTER_BLOCK_EDGE_ENV} must be a positive integer") from error
+    if edge <= 0:
+        raise RuntimeError(f"{RASTER_BLOCK_EDGE_ENV} must be a positive integer")
+    return [f"-D{RASTER_BLOCK_EDGE_ENV}={edge}"]
+
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 setup(
     name="diff_gaussian_rasterization",
@@ -26,7 +45,10 @@ setup(
             "cuda_rasterizer/backward.cu",
             "rasterize_points.cu",
             "ext.cpp"],
-            extra_compile_args={"nvcc": ["-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")]})
+            extra_compile_args={
+                "nvcc": ["-I" + os.path.join(PROJECT_ROOT, "third_party/glm/")]
+                + raster_block_edge_compile_args()
+            })
         ],
     cmdclass={
         'build_ext': BuildExtension
