@@ -14,6 +14,17 @@ from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 import os
 os.path.dirname(os.path.abspath(__file__))
 
+nvcc_args = ["-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")]
+block_edge = os.environ.get("THREEDGS_SLAM_RASTER_BLOCK_EDGE")
+if block_edge is not None:
+    try:
+        block_edge = int(block_edge)
+    except ValueError as error:
+        raise RuntimeError("THREEDGS_SLAM_RASTER_BLOCK_EDGE must be an integer") from error
+    if block_edge <= 0:
+        raise RuntimeError("THREEDGS_SLAM_RASTER_BLOCK_EDGE must be positive")
+    nvcc_args.extend([f"-DBLOCK_X={block_edge}", f"-DBLOCK_Y={block_edge}"])
+
 setup(
     name="diff_gaussian_rasterization",
     packages=['diff_gaussian_rasterization'],
@@ -26,7 +37,7 @@ setup(
             "cuda_rasterizer/backward.cu",
             "rasterize_points.cu",
             "ext.cpp"],
-            extra_compile_args={"nvcc": ["-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")]})
+            extra_compile_args={"nvcc": nvcc_args})
         ],
     cmdclass={
         'build_ext': BuildExtension
