@@ -14,6 +14,37 @@ import torch.nn as nn
 import torch
 from . import _C
 
+_binning_capture_callback = None
+
+
+def set_binning_capture_callback(callback):
+    """Install an opt-in observer for the rasterizer's exact sorted tile lists."""
+    if callback is not None and not callable(callback):
+        raise TypeError("binning capture callback must be callable or None")
+    global _binning_capture_callback
+    _binning_capture_callback = callback
+
+
+def _emit_binning_capture(num_rendered, radii, binning_buffer, image_buffer, raster_settings):
+    if _binning_capture_callback is None:
+        return
+    point_list, tile_ranges, ray_operations = _C.decode_rasterizer_tile_lists(
+        binning_buffer,
+        image_buffer,
+        num_rendered,
+        raster_settings.image_height,
+        raster_settings.image_width,
+    )
+    _binning_capture_callback(
+        {
+            "num_rendered": num_rendered,
+            "radii": radii,
+            "point_list": point_list,
+            "tile_ranges": tile_ranges,
+            "ray_operations": ray_operations,
+        }
+    )
+
 def rasterize_gaussians(
     means3D,
     means2D,
@@ -77,6 +108,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         # Invoke C++/CUDA rasterizer
         # num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer = _C.rasterize_gaussians(*args)
         num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer, depth = _C.rasterize_gaussians(*args)
+        _emit_binning_capture(num_rendered, radii, binningBuffer, imgBuffer, raster_settings)
 
         # Keep relevant tensors for backward
         ctx.raster_settings = raster_settings
@@ -194,4 +226,3 @@ class GaussianRasterizer(nn.Module):
             cov3D_precomp,
             raster_settings, 
         )
-
