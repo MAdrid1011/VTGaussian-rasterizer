@@ -18,8 +18,10 @@
 #include <stdio.h>
 #include <cuda_runtime_api.h>
 #include <memory>
+#include <limits>
 #include "cuda_rasterizer/config.h"
 #include "cuda_rasterizer/rasterizer.h"
+#include "cuda_rasterizer/rasterizer_impl.h"
 #include <fstream>
 #include <string>
 #include <functional>
@@ -212,4 +214,52 @@ torch::Tensor markVisible(
   }
   
   return present;
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+DecodeRasterizerTileListsCUDA(
+	const torch::Tensor& binningBuffer,
+	const torch::Tensor& imageBuffer,
+	const int rendered,
+	const int image_height,
+	const int image_width)
+{
+	TORCH_CHECK(rendered >= 0, "rendered must be non-negative");
+	TORCH_CHECK(image_height > 0 && image_width > 0, "image dimensions must be positive");
+	TORCH_CHECK(binningBuffer.is_cuda() && imageBuffer.is_cuda(), "rasterizer buffers must be CUDA tensors");
+	TORCH_CHECK(binningBuffer.device() == imageBuffer.device(), "rasterizer buffers must share a CUDA device");
+	TORCH_CHECK(binningBuffer.scalar_type() == torch::kUInt8 && imageBuffer.scalar_type() == torch::kUInt8,
+		"rasterizer buffers must have uint8 storage");
+	TORCH_CHECK(binningBuffer.is_contiguous() && imageBuffer.is_contiguous(), "rasterizer buffers must be contiguous");
+	const int64_t image_entries = static_cast<int64_t>(image_height) * image_width;
+	const int64_t tile_count =
+		((static_cast<int64_t>(image_height) + BLOCK_Y - 1) / BLOCK_Y) *
+		((static_cast<int64_t>(image_width) + BLOCK_X - 1) / BLOCK_X);
+	TORCH_CHECK(image_entries <= std::numeric_limits<int>::max(),
+		"image dimensions exceed supported rasterizer buffer size");
+	// PyTorch 1.13 does not expose a uint32 tensor scalar type. The native
+	// buffers remain uint32_t; this signed view preserves their exact bits.
+	auto point_options = binningBuffer.options().dtype(torch::kInt32);
+	auto range_options = imageBuffer.options().dtype(torch::kInt32);
+	if (rendered == 0) {
+		return std::make_tuple(
+			torch::empty({0}, point_options),
+			torch::zeros({tile_count, 2}, range_options),
+			torch::zeros({image_height, image_width}, point_options));
+	}
+	TORCH_CHECK(binningBuffer.numel() > 0, "non-empty tile lists require a binning buffer");
+	const size_t image_bytes = CudaRasterizer::required<CudaRasterizer::ImageState>(static_cast<size_t>(image_entries));
+	TORCH_CHECK(imageBuffer.numel() >= static_cast<int64_t>(image_bytes),
+		"image buffer is smaller than its rasterizer ImageState layout");
+	char* binning_chunk = reinterpret_cast<char*>(binningBuffer.data_ptr());
+	char* image_chunk = reinterpret_cast<char*>(imageBuffer.data_ptr());
+	auto binning_state = CudaRasterizer::BinningState::fromChunk(binning_chunk, rendered);
+	auto image_state = CudaRasterizer::ImageState::fromChunk(image_chunk, image_entries);
+	// These views are consumed immediately by the capture callback. The source
+	// buffers are retained by the rasterizer autograd context until backward.
+	auto point_list = torch::from_blob(binning_state.point_list, {rendered}, point_options);
+	auto tile_ranges = torch::from_blob(reinterpret_cast<int32_t*>(image_state.ranges), {tile_count, 2}, range_options);
+	auto ray_operations = torch::from_blob(
+		reinterpret_cast<int32_t*>(image_state.ray_operations), {image_height, image_width}, point_options);
+	return std::make_tuple(point_list, tile_ranges, ray_operations);
 }
