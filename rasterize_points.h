@@ -64,7 +64,7 @@ torch::Tensor markVisible(
 		torch::Tensor& viewmatrix,
 		torch::Tensor& projmatrix);
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 DecodeRasterizerTileListsCUDA(
 	const torch::Tensor& binningBuffer,
 	const torch::Tensor& imageBuffer,

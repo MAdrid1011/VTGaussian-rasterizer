@@ -59,6 +59,7 @@ namespace FORWARD
 		float* final_T,
 		uint32_t* n_contrib,
 		uint32_t* ray_operations,
+		uint32_t* blended_ray_operations,
 		const float* bg_color,
 		float* out_color,
 		const float* depth,

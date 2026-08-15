@@ -216,7 +216,7 @@ torch::Tensor markVisible(
   return present;
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 DecodeRasterizerTileListsCUDA(
 	const torch::Tensor& binningBuffer,
 	const torch::Tensor& imageBuffer,
@@ -245,6 +245,7 @@ DecodeRasterizerTileListsCUDA(
 		return std::make_tuple(
 			torch::empty({0}, point_options),
 			torch::zeros({tile_count, 2}, range_options),
+			torch::zeros({image_height, image_width}, point_options),
 			torch::zeros({image_height, image_width}, point_options));
 	}
 	TORCH_CHECK(binningBuffer.numel() > 0, "non-empty tile lists require a binning buffer");
@@ -261,5 +262,7 @@ DecodeRasterizerTileListsCUDA(
 	auto tile_ranges = torch::from_blob(reinterpret_cast<int32_t*>(image_state.ranges), {tile_count, 2}, range_options);
 	auto ray_operations = torch::from_blob(
 		reinterpret_cast<int32_t*>(image_state.ray_operations), {image_height, image_width}, point_options);
-	return std::make_tuple(point_list, tile_ranges, ray_operations);
+	auto blended_ray_operations = torch::from_blob(
+		reinterpret_cast<int32_t*>(image_state.blended_ray_operations), {image_height, image_width}, point_options);
+	return std::make_tuple(point_list, tile_ranges, ray_operations, blended_ray_operations);
 }

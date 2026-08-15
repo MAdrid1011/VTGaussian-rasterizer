@@ -28,7 +28,7 @@ def set_binning_capture_callback(callback):
 def _emit_binning_capture(num_rendered, radii, binning_buffer, image_buffer, raster_settings):
     if _binning_capture_callback is None:
         return
-    point_list, tile_ranges, ray_operations = _C.decode_rasterizer_tile_lists(
+    point_list, tile_ranges, ray_operations, blended_ray_operations = _C.decode_rasterizer_tile_lists(
         binning_buffer,
         image_buffer,
         num_rendered,
@@ -42,6 +42,7 @@ def _emit_binning_capture(num_rendered, radii, binning_buffer, image_buffer, ras
             "point_list": point_list,
             "tile_ranges": tile_ranges,
             "ray_operations": ray_operations,
+            "blended_ray_operations": blended_ray_operations,
         }
     )
 
