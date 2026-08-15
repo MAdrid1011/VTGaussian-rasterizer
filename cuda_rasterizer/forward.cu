@@ -270,6 +270,7 @@ renderCUDA(
 	float* __restrict__ final_T,
 	uint32_t* __restrict__ n_contrib,
 	uint32_t* __restrict__ ray_operations,
+	uint32_t* __restrict__ blended_ray_operations,
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
 	const float* __restrict__ depth,
@@ -304,6 +305,7 @@ renderCUDA(
 	float T = 1.0f;
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
+	uint32_t blended_contributor = 0;
 	float C[CHANNELS] = { 0 };
 // 	float D = 0.0f;  // Mean Depth
     float D = 15.0f;  // Median Depth. TODO: This is a hack setting max_depth to 15
@@ -356,6 +358,7 @@ renderCUDA(
 				done = true;
 				continue;
 			}
+			blended_contributor++;
 
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
@@ -388,6 +391,7 @@ renderCUDA(
 		final_T[pix_id] = T;
 		n_contrib[pix_id] = last_contributor;
 		ray_operations[pix_id] = contributor;
+		blended_ray_operations[pix_id] = blended_contributor;
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_depth[pix_id] = D;
@@ -405,6 +409,7 @@ void FORWARD::render(
 	float* final_T,
 	uint32_t* n_contrib,
 	uint32_t* ray_operations,
+	uint32_t* blended_ray_operations,
 	const float* bg_color,
 	float* out_color,
 	const float* depth,
@@ -420,6 +425,7 @@ void FORWARD::render(
 		final_T,
 		n_contrib,
 		ray_operations,
+		blended_ray_operations,
 		bg_color,
 		out_color,
 		depth,
